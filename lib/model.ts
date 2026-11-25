@@ -6,16 +6,21 @@
 // snapshot's live-token protocols are kept apart and shown as the market's own values, never mixed into
 // the ranked board.
 //
-// Implied value follows only from the snapshot's own figures:
+// Implied value follows only from the snapshot's own figures, calibrated on its live tokens
+// (tools/fit.mjs writes lib/fit.json from the snapshot; nothing below is typed in from a report):
 //
-//   base       = tvl_usd x BASE_MULTIPLE
-//   growth     = clamp(change_7d, -60, 120) per cent
-//   growthMult = 1 + (growth / 100) x GROWTH_WEIGHT
-//   maturity   = 0.6 + min(age_days, 1095) / 1095 x 0.4   (age_days unknown: 365)
-//   implied    = max(1, round(base x growthMult x maturity))
+//   multiple   = 10^(intercept + slope x log10(clamp(tvl)) + category_offset)
+//                category_offset is the category's median residual around the pooled TVL power law when it
+//                has at least MIN_SAMPLES live tokens; otherwise the all-category median residual (a fall back
+//                the row records). The TVL is clamped to the calibration set's 5th..95th percentile only
+//                inside the exponent, so a giant is never priced off the shape of a small sample.
+//   growthMult = 1 + clamp(change_7d, -50, 50) / 100 x GROWTH_WEIGHT        (at most +/-5%)
+//   implied    = max(1, round(tvl x multiple x growthMult))
 //
-// The constants are the house model's, stated in the dashboard and changeable in the model sandbox. No
-// protocol name is ever special-cased: the same function scores every row.
+// Age is not in the model: its correlation with the calibration residual is about zero (fit.json
+// age_resid_r). No protocol name is ever special-cased: the same function scores every row.
+
+import { readFileSync } from 'node:fs';
 
 /** The snapshot's protocol entry: exactly the ten fields the sealed input carries. */
 export interface SnapshotProtocol {
@@ -40,31 +45,68 @@ export interface Snapshot {
   watchlist: string[];
 }
 
-/** The model's constants, as the dashboard states them and the sandbox may change them. */
+/** One category of the calibration set, as tools/fit.mjs measured it. */
+export interface FitCategory {
+  name: string;
+  n: number;
+  median_multiple: number;
+  median_tvl: number;
+  min_tvl: number;
+  max_tvl: number;
+  log_offset: number;
+  own_price: boolean;
+}
+
+/** lib/fit.json: what tools/fit.mjs measured on the snapshot's live tokens. */
+export interface Fit {
+  samples: number;
+  usable_before_trim: number;
+  multiple_trim: [number, number];
+  tvl_range_log10: [number, number];
+  age_resid_r: number;
+  growth_spearman_rho: number;
+  global_log_offset: number;
+  min_samples: number;
+  global_median_multiple: number;
+  global_median_tvl: number;
+  power_law: { intercept: number; slope: number; r: number };
+  growth_pearson_r: number;
+  band_log10: { own: [number, number]; fallback: [number, number] };
+  categories: FitCategory[];
+}
+
+export const FIT: Fit = JSON.parse(readFileSync(new URL('./fit.json', import.meta.url), 'utf8')) as Fit;
+
+/** The model's constants: the fitted ones come from FIT, the two growth ones are a design choice. */
 export interface ModelConstants {
-  base_multiple: number;
+  intercept: number;
+  slope: number;
+  global_log_offset: number;
+  min_samples: number;
+  measured_samples: number;
+  tvl_range_log10: [number, number];
   growth_weight: number;
   growth_floor: number;
   growth_cap: number;
-  maturity_floor: number;
-  maturity_range: number;
-  maturity_days: number;
-  unknown_age_days: number;
 }
 
 export const MODEL: ModelConstants = {
-  base_multiple: 0.25,
-  growth_weight: 0.5,
-  growth_floor: -60,
-  growth_cap: 120,
-  maturity_floor: 0.6,
-  maturity_range: 0.4,
-  maturity_days: 1095,
-  unknown_age_days: 365,
+  intercept: FIT.power_law.intercept,
+  slope: FIT.power_law.slope,
+  global_log_offset: FIT.global_log_offset,
+  min_samples: FIT.min_samples,
+  measured_samples: 8,
+  tvl_range_log10: FIT.tvl_range_log10,
+  growth_weight: 0.1,
+  growth_floor: -50,
+  growth_cap: 50,
 };
 
+/** How a row's price rests on data: measured (own category, enough samples), thin, or fell back. */
+export type Reliability = 'measured' | 'thin' | 'fell_back' | 'no_data';
+
 /** The model's version label: the dashboard names it and the rules quote it. */
-export const MODEL_VERSION = 'radar-1';
+export const MODEL_VERSION = 'radar-2';
 
 /** How many pre-token protocols below the watchlist floor the early radar carries, by TVL. */
 export const EARLY_ROWS = 160;
@@ -95,11 +137,18 @@ export interface BoardRow {
   token_status: 'pre-token';
   age_days: number | null;
   implied_value_usd: number;
+  multiple: number;
+  category_samples: number;
+  reliability: Reliability;
+  fell_back: boolean;
+  implied_lo_usd: number;
+  implied_hi_usd: number;
   model: {
-    base_multiple: number;
+    category_offset_log10: number;
+    tvl_clamped: boolean;
+    extrapolated: boolean;
     growth_pct: number;
     growth_multiplier: number;
-    maturity_multiplier: number;
     age_days: number | null;
   };
   farm_steps: string[];
@@ -118,8 +167,13 @@ export interface RadarRow {
   listed_at: string | null;
   age_days: number | null;
   implied_value_usd: number;
+  multiple: number;
+  category_samples: number;
+  reliability: Reliability;
+  fell_back: boolean;
+  implied_lo_usd: number;
+  implied_hi_usd: number;
   growth_multiplier: number;
-  maturity_multiplier: number;
 }
 
 /** A live-token protocol: it already trades, so the board shows the market's own value, not a model's. */
@@ -133,12 +187,27 @@ export interface LiveRow {
   change_7d: number | null;
 }
 
+/** The method panel's figures: the calibration set and every category with its sample size. */
+export interface Calibration {
+  samples: number;
+  usable_before_trim: number;
+  multiple_trim: [number, number];
+  global_median_multiple: number;
+  power_law: { intercept: number; slope: number; r: number };
+  growth_pearson_r: number;
+  growth_spearman_rho: number;
+  age_resid_r: number;
+  band_log10: { own: [number, number]; fallback: [number, number] };
+  categories: { name: string; n: number; median_multiple: number | null; own_price: boolean; rows_on_board: number }[];
+}
+
 /** Everything the dashboard needs: the board, the live set, and the model it runs. */
 export interface RadarData {
   as_of: string;
   source: string;
   floor_usd: number;
   model: ModelConstants;
+  calibration: Calibration;
   model_version: string;
   watchlist_size: number;
   board_size: number;
@@ -172,17 +241,68 @@ export function ageDays(asOf: string, listedAt: string | null): number | null {
   return Math.max(0, Math.floor((a - b) / DAY_MS));
 }
 
-/** The three multipliers and the implied value one protocol gets under `model`. */
-export function impliedValue(protocol: SnapshotProtocol, asOf: string, model: ModelConstants): { implied: number; growthPct: number; growthMult: number; maturityMult: number; age: number | null } {
+/** What one protocol is priced at, and how much of that price rests on data. */
+export interface Priced {
+  implied: number;
+  lo: number;
+  hi: number;
+  multiple: number;
+  samples: number;
+  reliability: Reliability;
+  fellBack: boolean;
+  offset: number;
+  tvlClamped: boolean;
+  extrapolated: boolean;
+  growthPct: number;
+  growthMult: number;
+  age: number | null;
+}
+
+const BY_CATEGORY = new Map(FIT.categories.map((c) => [c.name, c]));
+
+/** The implied value one protocol gets under `model`, with its sample size, reliability and value band. */
+export function impliedValue(protocol: SnapshotProtocol, asOf: string, model: ModelConstants = MODEL): Priced {
   const age = ageDays(asOf, protocol.listed_at);
-  const rawGrowth = finite(protocol.change_7d, 0);
-  const growthPct = Math.min(model.growth_cap, Math.max(model.growth_floor, rawGrowth));
+  const growthPct = Math.min(model.growth_cap, Math.max(model.growth_floor, finite(protocol.change_7d, 0)));
   const growthMult = 1 + (growthPct / 100) * model.growth_weight;
-  const ageForModel = age ?? model.unknown_age_days;
-  const maturityMult = model.maturity_floor + (Math.min(Math.max(ageForModel, 0), model.maturity_days) / model.maturity_days) * model.maturity_range;
-  const base = protocol.tvl_usd * model.base_multiple;
-  const implied = Math.max(1, Math.round(base * growthMult * maturityMult));
-  return { implied, growthPct, growthMult, maturityMult, age };
+
+  const cat = protocol.category === null ? undefined : BY_CATEGORY.get(protocol.category);
+  const samples = cat?.n ?? 0;
+  const own = cat !== undefined && samples >= model.min_samples;
+  const offset = own ? cat.log_offset : model.global_log_offset;
+
+  const logTvl = Math.log10(Math.max(protocol.tvl_usd, 1));
+  const [lo10, hi10] = model.tvl_range_log10;
+  const clamped = Math.min(hi10, Math.max(lo10, logTvl));
+  const multiple = 10 ** (model.intercept + model.slope * clamped + offset);
+
+  // A price is extrapolated when the protocol is more than 10x outside the TVLs its category was measured at.
+  const extrapolated = own && (protocol.tvl_usd > cat.max_tvl * 10 || protocol.tvl_usd < cat.min_tvl / 10);
+  let reliability: Reliability;
+  if (!own) reliability = samples === 0 ? 'no_data' : 'fell_back';
+  else if (samples >= model.measured_samples && !extrapolated) reliability = 'measured';
+  else reliability = 'thin';
+
+  // The band is the 20th..80th percentile of the calibration residuals around the level this row used: its own
+  // category's spread when it is priced from one, the pooled (wider) spread when it fell back, and the pooled
+  // spread again when the price is thin, so a thin price never looks tighter than a fallback.
+  const [bl, bh] = reliability === 'measured' ? FIT.band_log10.own : FIT.band_log10.fallback;
+  const implied = Math.max(1, Math.round(protocol.tvl_usd * multiple * growthMult));
+  return {
+    implied,
+    lo: Math.max(1, Math.round(implied * 10 ** bl)),
+    hi: Math.max(1, Math.round(implied * 10 ** bh)),
+    multiple,
+    samples,
+    reliability,
+    fellBack: !own,
+    offset,
+    tvlClamped: clamped !== logTvl,
+    extrapolated,
+    growthPct,
+    growthMult,
+    age,
+  };
 }
 
 /** DefiLlama's version-marker rule: a name ending in a release is a pool of another protocol. */
@@ -230,8 +350,8 @@ export function buildBoard(snapshot: Snapshot, model: ModelConstants = MODEL): B
   for (const p of early) chosen.set(p.slug, p);
 
   const scored = [...chosen.values()].map((p) => {
-    const { implied, growthPct, growthMult, maturityMult, age } = impliedValue(p, snapshot.as_of, model);
-    return { p, implied, growthPct, growthMult, maturityMult, age };
+    const priced = impliedValue(p, snapshot.as_of, model);
+    return { p, implied: priced.implied, age: priced.age, priced };
   });
   scored.sort((a, b) => b.implied - a.implied || (a.p.slug < b.p.slug ? -1 : a.p.slug > b.p.slug ? 1 : 0));
   return scored.map((s, i) => ({
@@ -249,11 +369,18 @@ export function buildBoard(snapshot: Snapshot, model: ModelConstants = MODEL): B
     token_status: 'pre-token',
     age_days: s.age,
     implied_value_usd: s.implied,
+    multiple: round4(s.priced.multiple),
+    category_samples: s.priced.samples,
+    reliability: s.priced.reliability,
+    fell_back: s.priced.fellBack,
+    implied_lo_usd: s.priced.lo,
+    implied_hi_usd: s.priced.hi,
     model: {
-      base_multiple: model.base_multiple,
-      growth_pct: s.growthPct,
-      growth_multiplier: round4(s.growthMult),
-      maturity_multiplier: round4(s.maturityMult),
+      category_offset_log10: round4(s.priced.offset),
+      tvl_clamped: s.priced.tvlClamped,
+      extrapolated: s.priced.extrapolated,
+      growth_pct: s.priced.growthPct,
+      growth_multiplier: round4(s.priced.growthMult),
       age_days: s.age,
     },
     farm_steps: farmSteps(s.p, s.age).map(stepText),
@@ -382,8 +509,36 @@ export function radarRow(row: BoardRow): RadarRow {
     listed_at: row.listed_at,
     age_days: row.age_days,
     implied_value_usd: row.implied_value_usd,
+    multiple: row.multiple,
+    category_samples: row.category_samples,
+    reliability: row.reliability,
+    fell_back: row.fell_back,
+    implied_lo_usd: row.implied_lo_usd,
+    implied_hi_usd: row.implied_hi_usd,
     growth_multiplier: row.model.growth_multiplier,
-    maturity_multiplier: row.model.maturity_multiplier,
+  };
+}
+
+/** The calibration set and every category (measured, or on the board with no sample) with its sample size. */
+export function calibration(board: BoardRow[]): Calibration {
+  const onBoard = new Map<string, number>();
+  for (const r of board) onBoard.set(r.category ?? 'Uncategorised', (onBoard.get(r.category ?? 'Uncategorised') ?? 0) + 1);
+  const known = new Set(FIT.categories.map((c) => c.name));
+  const categories = [
+    ...FIT.categories.map((c) => ({ name: c.name, n: c.n, median_multiple: c.median_multiple, own_price: c.n >= MODEL.min_samples, rows_on_board: onBoard.get(c.name) ?? 0 })),
+    ...[...onBoard.entries()].filter(([name]) => !known.has(name)).map(([name, rows]) => ({ name, n: 0, median_multiple: null, own_price: false, rows_on_board: rows })),
+  ].sort((a, b) => b.n - a.n || (a.name < b.name ? -1 : 1));
+  return {
+    samples: FIT.samples,
+    usable_before_trim: FIT.usable_before_trim,
+    multiple_trim: FIT.multiple_trim,
+    global_median_multiple: FIT.global_median_multiple,
+    power_law: FIT.power_law,
+    growth_pearson_r: FIT.growth_pearson_r,
+    growth_spearman_rho: FIT.growth_spearman_rho,
+    age_resid_r: FIT.age_resid_r,
+    band_log10: FIT.band_log10,
+    categories,
   };
 }
 
@@ -397,6 +552,7 @@ export function buildRadar(snapshot: Snapshot, model: ModelConstants = MODEL): {
     source: snapshot.source,
     floor_usd: snapshot.floor_usd,
     model,
+    calibration: calibration(board),
     model_version: MODEL_VERSION,
     watchlist_size: snapshot.watchlist.length,
     board_size: board.length,
