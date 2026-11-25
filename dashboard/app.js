@@ -43,31 +43,19 @@
   }
   function fmtBand(row) {
     if (!row.implied_lo_usd || !row.implied_hi_usd) return '';
-    return fmtUsd(row.implied_lo_usd) + ' - ' + fmtUsd(row.implied_hi_usd);
+    return fmtUsd(row.implied_lo_usd) + ' to ' + fmtUsd(row.implied_hi_usd);
   }
   function fmtAge(days) {
     if (days === null || days === undefined) return 'unknown';
     if (days >= 365) return (days / 365).toFixed(1) + 'y';
     return Math.max(0, Math.round(days)) + 'd';
   }
-  // The model in one function: the page recomputes a row from the snapshot figures and checks the
-  // number board.json carries, so the page's code and the board's data are visibly the same arithmetic.
-  // The page recomputes the row exactly as lib/model.ts does: the calibrated
-  // category multiple, the small growth tilt and the maturity tilt. It never
-  // re-derives with a constant the model no longer uses.
+  // The page recomputes a row from the figures the board carries: tvl x multiple x growth tilt, the same
+  // product lib/model.ts takes. The multiple is the row's own (rounded to 4 decimals on the board), so the
+  // result agrees with the board's number to within that rounding.
   function impliedOf(row) {
-    var conf = (window.RADAR_CONFIDENCE || {})[row.category || 'Uncategorised'];
-    var multiple;
-    if (conf && conf.used) multiple = conf.used;
-    else multiple = window.RADAR_GLOBAL_MEDIAN || 0.2632;
-    // The board's own multiple is authoritative when it names one.
-    if (row.multiple !== undefined && row.multiple !== null) multiple = row.multiple;
-    var growth = row.change_7d === null || row.change_7d === undefined ? 0 : row.change_7d;
-    growth = Math.min(120, Math.max(-60, growth));
-    var growthMult = 1 + (growth / 100) * 0.05;
-    var age = row.age_days === null || row.age_days === undefined ? 365 : row.age_days;
-    var maturity = 0.85 + (Math.min(Math.max(age, 0), 1095) / 1095) * 0.15;
-    return Math.max(1, Math.round(row.tvl_usd * multiple * growthMult * maturity));
+    var growth = row.growth_multiplier === undefined || row.growth_multiplier === null ? 1 : row.growth_multiplier;
+    return Math.max(1, Math.round(row.tvl_usd * row.multiple * growth));
   }
 
   function el(tag, attrs) {
@@ -287,7 +275,7 @@
             sortHeader('growth', '7d'),
             sortHeader('age', 'Age'),
             sortHeader('implied', 'Implied value'),
-            el('th', { scope: 'col', text: 'Confidence' })
+            el('th', { scope: 'col', text: 'Reliability' })
           )),
           tbody
         )
@@ -320,60 +308,68 @@
 
   function modelPanel() {
     var m = DATA.model;
+    var cal = DATA.calibration;
     var counts = { measured: 0, thin: 0, fell_back: 0, no_data: 0 };
     DATA.rows.forEach(function (r) {
       var k = r.reliability || 'no_data';
-      if (counts[k] === undefined) counts[k] = 0;
-      counts[k] += 1;
+      counts[k] = (counts[k] || 0) + 1;
     });
+    var pct = Math.round(m.growth_cap * m.growth_weight);
 
-    // One row per category present on the board, strongest sample first.
-    var byCat = {};
-    DATA.rows.forEach(function (r) {
-      var c = r.category || 'Uncategorised';
-      if (!byCat[c]) byCat[c] = { name: c, n: r.category_samples || 0, rel: r.reliability, rows: 0 };
-      byCat[c].rows += 1;
-    });
-    var cats = Object.keys(byCat).map(function (k) { return byCat[k]; })
-      .sort(function (a, b) { return b.n - a.n || a.name.localeCompare(b.name); });
+    // Every category that has at least one row on the board, strongest sample first.
+    var cats = cal.categories.filter(function (c) { return c.rows_on_board > 0; });
+    var onBoard = cats.reduce(function (t, c) { return t + c.rows_on_board; }, 0);
 
-    var REL_ORDER = { measured: 0, thin: 1, fell_back: 2, no_data: 3 };
     return el('section', { class: 'panel model' },
-      el('h2', { text: 'How implied value is computed' }),
-      el('p', { class: 'sub', text: 'No protocol name is special-cased and no row is hand-picked. The multiple for a category is measured from the live-token protocols in this same snapshot, then shrunk toward the all-category median by how many samples the category has.' }),
+      el('h2', { text: 'How implied value is calibrated' }),
+      el('p', { class: 'sub', text: 'Nothing here is typed in from a report and no protocol is special-cased. Every constant is fitted on the ' + cal.samples + ' live-token protocols in this same snapshot (' + cal.usable_before_trim + ' usable before trimming multiples outside ' + cal.multiple_trim[0] + 'x to ' + cal.multiple_trim[1] + 'x). The market multiple is market cap divided by TVL.' }),
       el('div', { class: 'formula' },
-        'multiple = 10^(intercept + slope x log10(tvl_usd))      implied = round( tvl_usd x multiple x growth_tilt x maturity )'
+        'multiple = 10^(' + m.intercept.toFixed(3) + ' + (' + m.slope.toFixed(3) + ') x log10(tvl_usd) + category_offset)',
+        el('br'),
+        'implied = round( tvl_usd x multiple x growth_tilt )          band = implied x 10^(lo..hi)'
       ),
-      el('p', { class: 'sub', text: 'The slope and intercept are fitted per category on the snapshot\'s own live tokens; the growth tilt is capped at +/-5% because the measured correlation between seven-day growth and the market multiple is r=0.05, close to nothing. Maturity tilts 15% across the first three years a protocol has run without a token.' }),
 
-      el('h3', { text: 'How far each row can be trusted' }),
-      el('p', { class: 'sub', text: 'A category with fewer than three live tokens in the snapshot cannot support a price of its own. Those rows use the all-category median and say so, rather than extrapolating from one or two examples.' }),
+      el('h3', { text: '1. A per-category multiple, fitted from live tokens' }),
+      el('p', { class: 'sub', text: 'A category\'s offset is the median distance of its live tokens from the pooled curve below, so a category that trades richer or cheaper than its size predicts keeps that difference. It is used only when the category has at least ' + m.min_samples + ' live tokens in the snapshot.' }),
+
+      el('h3', { text: '2. A TVL power law' }),
+      el('p', { class: 'sub', text: 'Larger protocols trade at lower multiples: across the calibration set the log of the multiple falls with the log of TVL (slope ' + cal.power_law.slope.toFixed(2) + ', r = ' + cal.power_law.r.toFixed(2) + '). A flat multiple would price a $2B protocol like a $60M one. TVL is clamped to the 10^' + m.tvl_range_log10[0].toFixed(1) + ' to 10^' + m.tvl_range_log10[1].toFixed(1) + ' range of the calibration set inside the exponent only, so a giant is never priced off a curve nobody measured out there.' }),
+
+      el('h3', { text: '3. A capped growth tilt' }),
+      el('p', { class: 'sub', text: 'Seven-day TVL growth is clamped to ' + m.growth_floor + '% to +' + m.growth_cap + '% and scaled by ' + m.growth_weight + ', so it moves a price by at most +/-' + pct + '%. It is kept that small on purpose: across the live tokens its correlation with the market multiple is r = ' + cal.growth_pearson_r.toFixed(2) + ' (Spearman ' + cal.growth_spearman_rho.toFixed(2) + '), close to nothing. Age is not in the model for the same reason (its correlation with the residual is ' + cal.age_resid_r.toFixed(2) + ').' }),
+
+      el('h3', { text: 'Why a thin category falls back instead of extrapolating' }),
+      el('p', { class: 'sub', text: 'A category with fewer than ' + m.min_samples + ' live tokens cannot support an offset: one or two examples are an anecdote, and an offset taken from them would be passed off as a measurement. Those rows use the all-category median offset and are labelled fell back (one or two samples) or no data (none). Categories with ' + m.min_samples + ' to ' + (m.measured_samples - 1) + ' samples, or a TVL more than 10x outside what the category was measured at, are priced on their own offset but labelled thin. Every row that is not measured carries the wider pooled band.' }),
       el('div', { class: 'rel-summary' },
-        el('span', { class: 'reliab reliab-measured', text: counts.measured + ' rows measured' }),
-        el('span', { class: 'reliab reliab-thin', text: counts.thin + ' rows thin' }),
-        el('span', { class: 'reliab reliab-fell_back', text: counts.fell_back + ' rows fell back' }),
-        el('span', { class: 'reliab reliab-no_data', text: counts.no_data + ' rows no data' })
+        el('span', { class: 'reliab reliab-measured', text: counts.measured + ' measured' }),
+        el('span', { class: 'reliab reliab-thin', text: counts.thin + ' thin' }),
+        el('span', { class: 'reliab reliab-fell_back', text: counts.fell_back + ' fell back' }),
+        el('span', { class: 'reliab reliab-no_data', text: counts.no_data + ' no data' })
       ),
+      el('p', { class: 'sub', text: 'Bands: a measured row gets its own category\'s spread (' + bandText(cal.band_log10.own) + '); every other row gets the pooled spread (' + bandText(cal.band_log10.fallback) + '). Both are the 20th to 80th percentile of the calibration residuals.' }),
       el('div', { class: 'table-wrap' },
         el('table', { class: 'cats' },
-          el('caption', { class: 'sub', text: 'Every category on the board, by how many live-token samples it has.' }),
+          el('caption', { class: 'sub', text: 'Every category on the board (' + cats.length + ' categories, ' + onBoard + ' rows), with its live-token sample count and how many rows are priced from it.' }),
           el('thead', null, el('tr', null,
             el('th', { scope: 'col', text: 'Category' }),
             el('th', { scope: 'col', text: 'Live samples' }),
-            el('th', { scope: 'col', text: 'Rows on board' }),
-            el('th', { scope: 'col', text: 'Priced from' })
+            el('th', { scope: 'col', text: 'Rows priced from it' }),
+            el('th', { scope: 'col', text: 'Priced on' })
           )),
           el('tbody', null, cats.map(function (c) {
             return el('tr', null,
               el('td', { text: c.name }),
               el('td', { class: 'num', text: String(c.n) }),
-              el('td', { class: 'num', text: String(c.rows) }),
-              el('td', null, reliabilityBadge({ reliability: c.rel }))
+              el('td', { class: 'num', text: String(c.rows_on_board) }),
+              el('td', { text: c.own_price ? 'its own offset' : 'all-category median' })
             );
           }))
         )
       )
     );
+  }
+  function bandText(b) {
+    return (Math.pow(10, b[0])).toFixed(2) + 'x to ' + (Math.pow(10, b[1])).toFixed(2) + 'x';
   }
 
   function openDetail(slug) {
@@ -396,12 +392,14 @@
       el('div', { class: 'equation' },
         el('div', null, el('span', { text: 'TVL' }), el('b', { class: 'num', text: fmtUsd(row.tvl_usd) })),
         el('div', null, el('span', { text: 'Seven-day growth' }), el('b', { class: 'num', text: fmtPct(row.change_7d) })),
-        el('div', null, el('span', { text: 'Age with no token' }), el('b', { class: 'num', text: fmtAge(row.age_days) })),
-        el('div', null, el('span', { text: 'Growth multiplier' }), el('b', { class: 'num', text: String(row.growth_multiplier) })),
-        el('div', null, el('span', { text: 'Maturity multiplier' }), el('b', { class: 'num', text: String(row.maturity_multiplier) })),
-        el('div', null, el('span', { text: 'Implied value' }), el('b', { class: 'num', text: fmtUsd(row.implied_value_usd) }))
+        el('div', null, el('span', { text: 'Multiple (market cap / TVL)' }), el('b', { class: 'num', text: String(row.multiple) })),
+        el('div', null, el('span', { text: 'Growth tilt' }), el('b', { class: 'num', text: String(row.growth_multiplier) })),
+        el('div', null, el('span', { text: 'Implied value' }), el('b', { class: 'num', text: fmtUsd(row.implied_value_usd) })),
+        el('div', null, el('span', { text: 'Value band' }), el('b', { class: 'num', text: fmtBand(row) })),
+        el('div', null, el('span', { text: 'Reliability' }), reliabilityBadge(row)),
+        el('div', null, el('span', { text: 'Live samples in ' + (row.category || 'its category') }), el('b', { class: 'num', text: String(row.category_samples) }))
       ),
-      el('p', { class: 'sub', text: 'Model ' + DATA.model_version + ': one function scores every protocol. The page recomputes this row as ' + fmtUsd(impliedOf(row)) + ', within rounding of the ' + fmtUsd(row.implied_value_usd) + ' board.json carries. This is an estimate, not a price.' })
+      el('p', { class: 'sub', text: 'Model ' + DATA.model_version + ': one function scores every protocol. The page recomputes this row as ' + fmtUsd(impliedOf(row)) + ' from the figures above, within rounding of the ' + fmtUsd(row.implied_value_usd) + ' board.json carries. ' + (RELIABILITY_TITLE[row.reliability] || '') + ' This is an estimate, not a price.' })
     ));
     dialog.appendChild(el('section', { class: 'detail-section' },
       el('h3', { text: 'Farm plan' }),
