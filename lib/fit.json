@@ -1,0 +1,356 @@
+{
+ "samples": 116,
+ "usable_before_trim": 128,
+ "multiple_trim": [
+  0.01,
+  50
+ ],
+ "tvl_range_log10": [
+  6.778101376036965,
+  9.445614618744534
+ ],
+ "age_resid_r": -0.03510724473482399,
+ "growth_spearman_rho": 0.04356283396763157,
+ "global_log_offset": -0.033165626303103074,
+ "min_samples": 3,
+ "global_median_multiple": 0.2631549120296063,
+ "global_median_tvl": 27802987,
+ "power_law": {
+  "intercept": 2.0747475531678177,
+  "slope": -0.3410878926265662,
+  "r": -0.36385776359292366
+ },
+ "growth_pearson_r": 0.05232579104465851,
+ "band_log10": {
+  "own": [
+   -0.5245629710650299,
+   0.3930026414523383
+  ],
+  "fallback": [
+   -0.5979172389638885,
+   0.6405241155738852
+  ]
+ },
+ "categories": [
+  {
+   "name": "Lending",
+   "n": 14,
+   "median_multiple": 0.15050349545717423,
+   "median_tvl": 22350781.5,
+   "min_tvl": 7022402,
+   "max_tvl": 159772077,
+   "log_offset": -0.30183113043856996,
+   "own_price": true
+  },
+  {
+   "name": "Dexs",
+   "n": 11,
+   "median_multiple": 0.3424347567468315,
+   "median_tvl": 20870492,
+   "min_tvl": 7296111,
+   "max_tvl": 56421343,
+   "log_offset": -0.025529746529714403,
+   "own_price": true
+  },
+  {
+   "name": "RWA",
+   "n": 9,
+   "median_multiple": 0.27478004488804697,
+   "median_tvl": 47373718,
+   "min_tvl": 5502874,
+   "max_tvl": 487561390,
+   "log_offset": 0.05859647726377415,
+   "own_price": true
+  },
+  {
+   "name": "Liquid Staking",
+   "n": 8,
+   "median_multiple": 0.0441339932738274,
+   "median_tvl": 24560143.5,
+   "min_tvl": 5926765,
+   "max_tvl": 18721539391,
+   "log_offset": -0.5004618922894388,
+   "own_price": true
+  },
+  {
+   "name": "Yield",
+   "n": 8,
+   "median_multiple": 0.2561268347845366,
+   "median_tvl": 10112465,
+   "min_tvl": 5045118,
+   "max_tvl": 461947766,
+   "log_offset": 0.0016461923962401565,
+   "own_price": true
+  },
+  {
+   "name": "Basis Trading",
+   "n": 7,
+   "median_multiple": 0.6544182484481614,
+   "median_tvl": 33419734,
+   "min_tvl": 6085254,
+   "max_tvl": 1557707205,
+   "log_offset": 0.28664967058485874,
+   "own_price": true
+  },
+  {
+   "name": "CEX",
+   "n": 7,
+   "median_multiple": 0.07483070804051081,
+   "median_tvl": 1219276691,
+   "min_tvl": 37937448,
+   "max_tvl": 26324198228,
+   "log_offset": 0.20699377815388864,
+   "own_price": true
+  },
+  {
+   "name": "Canonical Bridge",
+   "n": 7,
+   "median_multiple": 1.1260767310225874,
+   "median_tvl": 53957600,
+   "min_tvl": 10785829,
+   "max_tvl": 2561365424,
+   "log_offset": 0.48064685712677946,
+   "own_price": true
+  },
+  {
+   "name": "Bridge",
+   "n": 5,
+   "median_multiple": 0.9884548792806734,
+   "median_tvl": 23447007,
+   "min_tvl": 7085071,
+   "max_tvl": 1285806408,
+   "log_offset": 0.2567787656083162,
+   "own_price": true
+  },
+  {
+   "name": "Cross Chain Bridge",
+   "n": 4,
+   "median_multiple": 1.2204617199899799,
+   "median_tvl": 10914193.5,
+   "min_tvl": 7139951,
+   "max_tvl": 65978518,
+   "log_offset": 0.33513772180803497,
+   "own_price": true
+  },
+  {
+   "name": "Yield Aggregator",
+   "n": 4,
+   "median_multiple": 0.1509594423418544,
+   "median_tvl": 13094934,
+   "min_tvl": 10650997,
+   "max_tvl": 88242646,
+   "log_offset": -0.44705071883435754,
+   "own_price": true
+  },
+  {
+   "name": "Indexes",
+   "n": 3,
+   "median_multiple": 0.14767790358555363,
+   "median_tvl": 43278603,
+   "min_tvl": 10414124,
+   "max_tvl": 79509819,
+   "log_offset": -0.5118058814637437,
+   "own_price": true
+  },
+  {
+   "name": "Privacy",
+   "n": 3,
+   "median_multiple": 0.9691292886670639,
+   "median_tvl": 107702928,
+   "min_tvl": 90279448,
+   "max_tvl": 662508266,
+   "log_offset": 0.6513297202190719,
+   "own_price": true
+  },
+  {
+   "name": "AI Agents",
+   "n": 2,
+   "median_multiple": 0.6046730841243859,
+   "median_tvl": 7929595.5,
+   "min_tvl": 7577571,
+   "max_tvl": 8281620,
+   "log_offset": 0.006014290336958744,
+   "own_price": false
+  },
+  {
+   "name": "CDP",
+   "n": 2,
+   "median_multiple": 0.20734450833976512,
+   "median_tvl": 38617519,
+   "min_tvl": 27257098,
+   "max_tvl": 49977940,
+   "log_offset": -0.18467554523868224,
+   "own_price": false
+  },
+  {
+   "name": "Derivatives",
+   "n": 2,
+   "median_multiple": 2.1618592615211134,
+   "median_tvl": 8419233,
+   "min_tvl": 5999311,
+   "max_tvl": 10839155,
+   "log_offset": 0.5850822983226647,
+   "own_price": false
+  },
+  {
+   "name": "Liquid Restaking",
+   "n": 2,
+   "median_multiple": 0.18276043842477482,
+   "median_tvl": 48096586.5,
+   "min_tvl": 10265592,
+   "max_tvl": 85927581,
+   "log_offset": -0.601569981432194,
+   "own_price": false
+  },
+  {
+   "name": "Payments",
+   "n": 2,
+   "median_multiple": 0.18129152516350583,
+   "median_tvl": 6986363,
+   "min_tvl": 5131538,
+   "max_tvl": 8841188,
+   "log_offset": -0.49892853195679954,
+   "own_price": false
+  },
+  {
+   "name": "Restaking",
+   "n": 2,
+   "median_multiple": 0.024639382830495778,
+   "median_tvl": 3846850372,
+   "min_tvl": 2790066912,
+   "max_tvl": 4903633832,
+   "log_offset": -0.4387677514973102,
+   "own_price": false
+  },
+  {
+   "name": "Token Locker",
+   "n": 2,
+   "median_multiple": 9.520396231263105,
+   "median_tvl": 30617855,
+   "min_tvl": 10045588,
+   "max_tvl": 51190122,
+   "log_offset": 0.4803436991350375,
+   "own_price": false
+  },
+  {
+   "name": "Chain",
+   "n": 1,
+   "median_multiple": 3.0264431251024972,
+   "median_tvl": 14189397,
+   "min_tvl": 14189397,
+   "max_tvl": 14189397,
+   "log_offset": 0.8456332719946724,
+   "own_price": false
+  },
+  {
+   "name": "Collateral Management",
+   "n": 1,
+   "median_multiple": 12.16023467146475,
+   "median_tvl": 13125243,
+   "min_tvl": 13125243,
+   "max_tvl": 13125243,
+   "log_offset": 1.4380946393879632,
+   "own_price": false
+  },
+  {
+   "name": "DOR",
+   "n": 1,
+   "median_multiple": 0.08976514627062378,
+   "median_tvl": 52470276,
+   "min_tvl": 52470276,
+   "max_tvl": 52470276,
+   "log_offset": -0.4884708349217177,
+   "own_price": false
+  },
+  {
+   "name": "Decentralized AI",
+   "n": 1,
+   "median_multiple": 2.0604431343004004,
+   "median_tvl": 40658464,
+   "min_tvl": 40658464,
+   "max_tvl": 40658464,
+   "log_offset": 0.8346023481436078,
+   "own_price": false
+  },
+  {
+   "name": "Dual-Token Stablecoin",
+   "n": 1,
+   "median_multiple": 0.03161512405499588,
+   "median_tvl": 79817906,
+   "min_tvl": 79817906,
+   "max_tvl": 79817906,
+   "log_offset": -0.879541913996182,
+   "own_price": false
+  },
+  {
+   "name": "Launchpad",
+   "n": 1,
+   "median_multiple": 0.1305826510239801,
+   "median_tvl": 138597079,
+   "min_tvl": 138597079,
+   "max_tvl": 138597079,
+   "log_offset": -0.18180833143281927,
+   "own_price": false
+  },
+  {
+   "name": "Leveraged Farming",
+   "n": 1,
+   "median_multiple": 0.17245264018165038,
+   "median_tvl": 81947316,
+   "min_tvl": 81947316,
+   "max_tvl": 81947316,
+   "log_offset": -0.13886681995773487,
+   "own_price": false
+  },
+  {
+   "name": "Liquidity Manager",
+   "n": 1,
+   "median_multiple": 0.01504615559945297,
+   "median_tvl": 10529600,
+   "min_tvl": 10529600,
+   "max_tvl": 10529600,
+   "log_offset": -1.5020623373427244,
+   "own_price": false
+  },
+  {
+   "name": "NFT Marketplace",
+   "n": 1,
+   "median_multiple": 2.0017137370601237,
+   "median_tvl": 9556892,
+   "min_tvl": 9556892,
+   "max_tvl": 9556892,
+   "log_offset": 0.607555922055144,
+   "own_price": false
+  },
+  {
+   "name": "Onchain Capital Allocator",
+   "n": 1,
+   "median_multiple": 0.0191189482020077,
+   "median_tvl": 1097985819,
+   "min_tvl": 1097985819,
+   "max_tvl": 1097985819,
+   "log_offset": -0.7096454695035672,
+   "own_price": false
+  },
+  {
+   "name": "Options",
+   "n": 1,
+   "median_multiple": 1.5145063057415222,
+   "median_tvl": 8160658,
+   "min_tvl": 8160658,
+   "max_tvl": 8160658,
+   "log_offset": 0.46302930797793906,
+   "own_price": false
+  },
+  {
+   "name": "Risk Curators",
+   "n": 1,
+   "median_multiple": 2.9747247664392233,
+   "median_tvl": 11776271,
+   "min_tvl": 11776271,
+   "max_tvl": 11776271,
+   "log_offset": 0.8105343823404112,
+   "own_price": false
+  }
+ ]
+}
