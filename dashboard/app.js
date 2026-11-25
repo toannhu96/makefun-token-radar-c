@@ -427,7 +427,7 @@
     if (state.tab === 'pre-token') shell.appendChild(modelPanel());
     app.appendChild(shell);
     app.setAttribute('aria-busy', 'false');
-    if (!dialog.isConnected) app.appendChild(dialog);
+    if (!dialog.isConnected) document.body.appendChild(dialog);
     if (state.selected) openDetail(state.selected);
   }
 
